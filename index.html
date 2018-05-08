@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Eight queens</title>
+  <style>
+    .size { width: 50px; }
+    @keyframes blink {
+      50% { opacity: .5; }
+      100% { opacity: 1; }
+    }
+    .finish { animation: blink 1s linear; }
+    .output {
+      margin: auto;
+      opacity: 0;
+      transition: opacity 1s;
+    }
+    .gallery { display: flex; }
+    .solutions {
+      flex-grow: 1;
+      display: flex;
+    }
+    .board {
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      position: relative;
+      transition: opacity 1s;
+    }
+    .ceil {
+      width: 20px;
+      height: 20px;
+    }
+    .black { background: #777; }
+    .white { background: #ddd; }
+    .queen {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #000;
+      position: absolute;
+      transition: 1s ease-in-out;
+    }
+  </style>
+</head>
+<body>
+
+<label>
+  Введите размер поля:
+  <input type="number" class="size" value="8">
+</label>
+<input type="button" class="send" value="Посчитать">
+<div class="output hidden">
+  <p>Колличество решений: <span class="num">0</span></p>
+  <div class="gallery">
+    <input type="button" class="button left" value="⊲">
+    <div class="solutions"></div>
+    <input type="button" class="button right" value="⊳">
+  </div>
+</div>
+
+<script>
+let board = {
+  setSize: function (size) {
+    this.size = size;
+    this.width = size * 20;
+    this.createBoard();
+  },
+
+  getCoord: function (i) {
+    return (i + 1) * 20 - 5;
+  },
+
+  createBoard: function () {
+    function rnd() {
+      return Math.floor(Math.random() * this.size);
+    }
+
+    let board = '<div class="board" style="width:' + (this.size * 20) + 'px">';
+
+    let even = this.size % 2 === 0;
+    let count = 0;
+    for (let i = 0; i < this.size; i++) {
+      for (let j = 0; j < this.size; j++) {
+        count++;
+
+        let color = count % 2 === 1 ? "white" : "black";
+        board += '<div class="ceil ' + color + '"></div>';
+      }
+
+      even && count++;
+      board += '<div class="queen" style="top:' + this.getCoord(i) +
+               'px;left:' + this.getCoord( rnd() ) + 'px"></div>';
+    }
+
+    board += '</div>';
+    this.html = board;
+  },
+
+  show: function (boardNode, data) {
+    let queens = boardNode.querySelectorAll(".queen");
+    queens = Array.from(queens);
+    queens.sort( () => Math.random() - 0.5 );
+
+    for (let i = 0; i < data.length; i++) {
+      queens[i].style.top = this.getCoord(i) + "px";
+      queens[i].style.left = this.getCoord(data[i]) + "px";
+    }
+  }
+};
+    
+let gallery = {
+  offset: 0,
+
+  showSolutions: function () {
+    let solutions = document.querySelector(".solutions");
+    let fullBoardWidth = board.width + 20;
+    this.boardsCount = solutions.clientWidth / fullBoardWidth;
+
+    solutions.innerHTML = "";
+    let count = Math.floor(this.boardsCount) || 1;
+    for (let i = 0; i < count; i++) {
+      solutions.insertAdjacentHTML("beforeend", board.html);
+    }
+  }
+};
+
+let data = [];
+
+document.querySelector(".send").addEventListener("click", function () {
+  document.querySelector(".output").style.opacity = "1";
+
+  let size = +document.querySelector(".size").value
+  board.setSize(size);
+
+  gallery.showSolutions();
+
+  let num = 0;
+  let numNode = document.querySelector(".num");
+
+  let sock = new WebSocket("ws://localhost:8080/compute");
+
+  sock.onopen = function () {
+    sock.send( size+[] );
+    numNode.classList.remove("finish");
+    data = [];
+  };
+
+  sock.onmessage = function (msg) {
+    num++;
+    numNode.innerHTML = num+[];
+
+    let sol = JSON.parse(msg.data);
+    data.push(sol);
+  };
+
+  sock.onclose = function () {
+    numNode.classList.add("finish");
+    document.querySelector(".left").setAttribute("disabled", "disabled");
+    let boards = document.querySelectorAll(".board");
+    gallery.offset = 0;
+    for (let i = 0; i < boards.length; i++) {
+      board.show(boards[i], data[i]);
+    }
+  };
+});
+
+document.querySelector(".left").addEventListener("click", function () {
+  let boards = document.querySelectorAll(".board");
+  gallery.offset -= boards.length;
+  if (gallery.offset < 0) {
+    gallery.offset = 0;
+  }
+
+  if (gallery.offset === 0) {
+    document.querySelector(".left").setAttribute("disabled", "disabled");
+  }
+
+  if (document.querySelector(".right").hasAttribute("disabled")) {
+    document.querySelector(".right").removeAttribute("disabled");
+  }
+
+  for (let i = 0; i < boards.length; i++) {
+    let real = i + gallery.offset;
+    boards[i].style.opacity = "1";
+    board.show(boards[i], data[real]);
+  }
+});
+
+document.querySelector(".right").addEventListener("click", function () {
+  let boards = document.querySelectorAll(".board");
+  gallery.offset += boards.length;
+  if (data.length <= gallery.offset + boards.length) {
+    document.querySelector(".right").setAttribute("disabled", "disabled");
+  }
+
+  if (document.querySelector(".left").hasAttribute("disabled")) {
+    document.querySelector(".left").removeAttribute("disabled");
+  }
+
+  for (let i = 0; i < boards.length; i++) {
+    if (data.length > i + gallery.offset) {
+      let real = i + gallery.offset;
+      board.show(boards[i], data[real]);
+    } else {
+      boards[i].style.opacity = "0";
+    }
+  }
+});
+</script>
+</body>
+</html>
